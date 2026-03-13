@@ -48,7 +48,19 @@ $delimiter = $semiCount > $commaCount ? ";" : ",";
 // заголовок нам не нужен, но всё равно его читаем
 $header = str_getcsv($firstLine, $delimiter);
 
-// готовим запрос один раз и переиспользуем
+// готовим запросы один раз, чтобы было быстрее
+$pharmacyStmt = $pdo->prepare("
+    INSERT INTO pharmacies (id, name, address)
+    VALUES (?, ?, ?)
+    ON DUPLICATE KEY UPDATE id = id
+");
+
+$productStmt = $pdo->prepare("
+    INSERT INTO products (id, name)
+    VALUES (?, ?)
+    ON DUPLICATE KEY UPDATE id = id
+");
+
 $stmt = $pdo->prepare("
     INSERT INTO prices
     (pharmacy_id, product_id, quantity, price, discount_price)
@@ -71,13 +83,17 @@ while (($data = fgetcsv($handle, 0, $delimiter)) !== false) {
     $price = parseNumber($data[3]);
     $discount = parseNumber($data[4]);
 
-    if ($price === null || $discount === null) {
+    if ($pharmacy <= 0 || $product <= 0 || $price === null || $discount === null) {
         $skipped++;
         continue;
     }
 
     // формула цены со скидкой
     $discount_price = $price - ($price * $discount / 100.0);
+
+    // добавляем справочники, если их ещё нет
+    $pharmacyStmt->execute([$pharmacy, "Аптека #{$pharmacy}", "Адрес неизвестен"]);
+    $productStmt->execute([$product, "Товар #{$product}"]);
 
     $stmt->execute([
         $pharmacy,
